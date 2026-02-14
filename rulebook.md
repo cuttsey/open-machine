@@ -1,8 +1,8 @@
-# The AI Truth Rulebook
+# Open Machine Principles
 
-A Plain-Language Guide to the Manifesto for Machine Participation and the Protection of Truth
+A Guide to the Manifesto for Machine Participation and the Protection of Truth
 
-*Written so that anyone can understand it*
+*Written so that everyone and anyone can understand it*
 
 February 2026
 
