@@ -23,12 +23,14 @@ Here's the core problem: **it is far easier to make something up than to prove i
 **Why it matters:** If we treat everything an AI says as just as trustworthy as what a qualified person says, we lose the ability to tell expertise from noise.
 
 What this looks like in practice:
+
 | **Domain** | **What Needs to Happen** | **Example** |
 | –- | –- | –- |
 | Education | Schools teach students how to tell AI-generated content from human-authored research. | A Year 9 history class learns to check whether an online article was written by a person or a bot before citing it in a project. |
 | Healthcare | Medical guidelines require human-authored evidence review, not AI summaries, as the basis for clinical decisions. | A hospital's treatment protocols are based on peer-reviewed studies signed by named researchers, not on AI-generated meta-analyses. |
 | Law | Courts require that expert testimony come from identifiable human experts, not AI-generated reports. | A judge rules that an AI-produced forensic analysis is inadmissible unless a qualified human expert has verified and endorsed it. |
 | Journalism | Newsrooms label AI-assisted content and maintain human editorial sign-off on all published claims. | A newspaper uses AI to draft a first version of an article, but a human editor fact-checks and approves every claim before publication. |
+
 ## Rule 2: AI Must Say It's AI
 
 **The rule:** Every AI agent operating in public — posting online, submitting code, writing articles, sending messages — must be clearly and permanently labelled as a machine. It should never be able to remove or hide this label.
