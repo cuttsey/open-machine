@@ -1,4 +1,4 @@
-# The AI Truth Rulebook
+# Open Machine Rulebook
 
 A Plain-Language Guide to the Manifesto for Machine Participation and the Protection of Truth
 
