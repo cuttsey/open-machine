@@ -1,4 +1,4 @@
-# open-machine
+# Open Machine Foundation
 Open Machine tracks incidents of AI agent harm, publishes governance principles for responsible machine deployment, and campaigns for a future where AI agents operate openly or not at all.
 
 # AI Agent Incident Tracker
@@ -51,7 +51,7 @@ This tracker was created alongside a set of academic and policy documents:
 
 - **"Truth at Machine Speed"** — an academic essay examining philosophical theories of truth (Kant, Habermas, Rorty) in relation to autonomous AI agents
 - **"A Manifesto for Machine Participation and the Protection of Truth"** — a set of 14 governance principles for AI agent deployment
-- **"The AI Truth Rulebook"** — a plain-language guide to the manifesto with industry compliance examples
+- **"Open Machine Principles"** — a plain-language guide to the manifesto with industry compliance examples
 
 ## Licence
 
