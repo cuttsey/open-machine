@@ -9,12 +9,14 @@ Open Machine Foundation is a **documentation-only repository** — no code, no b
 | File | Purpose | Maintained by |
 |------|---------|---------------|
 | `README.md` | Project overview, incident categories, and how the automation works | Human |
-| `incident_inventory.md` | Living inventory of documented AI agent incidents | Automated (n8n bot) + Human |
+| `incident_inventory.md` | Living inventory of documented AI agent incidents | Automated (GitHub Actions + Claude) + Human |
 | `contributing.md` | Contribution guidelines for human contributors | Human |
 | `problem.md` | Academic essay: "When Machines Express Belief Faster Than Minds Can Think" | Human (authored essay) |
 | `solution.md` | 14-principle manifesto for machine participation and truth protection | Human (authored essay) |
 | `rulebook.md` | Plain-language guide to the manifesto with compliance examples | Human |
 | `case-study.md` | Deep-dive case study of the MJ Rathbun incident | Human (authored essay) |
+| `.github/workflows/incident-tracker.yml` | GitHub Actions workflow for daily incident scanning | Human |
+| `scripts/scan_incidents.py` | Python script using Anthropic API with web search | Human |
 
 ## Document Relationships
 
@@ -55,10 +57,13 @@ The incident log in `incident_inventory.md` uses this exact table format:
 
 ## Automation Context
 
-- `incident_inventory.md` is auto-updated **daily at 07:00 UTC** by an n8n workflow using Claude (Sonnet 4.5) with web search
-- Automated commits are attributed to **"AI Incident Tracker Bot"**
+- `incident_inventory.md` is scanned for updates **daily at 07:00 UTC** by a GitHub Actions workflow (`.github/workflows/incident-tracker.yml`)
+- The workflow runs `scripts/scan_incidents.py`, which calls the Anthropic API (Claude with web search) to find new incidents
+- Updates are proposed as **pull requests** for human review — never committed directly to `main`
+- The workflow can also be triggered manually via `workflow_dispatch`
+- Requires the `ANTHROPIC_API_KEY` repository secret to be configured
 - Human-verified information **takes precedence** over automated scans
-- When editing `incident_inventory.md`, be aware of potential merge conflicts with the daily bot
+- When editing `incident_inventory.md`, check for open automated PRs on the `auto/incident-update` branch to avoid conflicts
 - Do not modify the "Scale of the Problem" metrics table, "Severity Assessment" table, or "Key Finding" section without explicit instruction — these are curated summaries
 
 ## Commit Message Convention
@@ -73,5 +78,4 @@ The incident log in `incident_inventory.md` uses this exact table format:
 - Editorialise or add opinion to any document
 - Modify `problem.md`, `solution.md`, or `case-study.md` without explicit instruction — these are authored essays, not living documents
 - Restructure the incident table format or severity assessment
-- Add code, scripts, or automation files to the repository
 - Remove or modify source citations without providing replacement sources

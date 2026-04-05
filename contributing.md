@@ -45,7 +45,7 @@ If you believe an entry contains an error, please open an issue or PR with:
 
 ## Automated Updates
 
-The inventory is updated daily by an automated workflow. Human contributions are merged alongside automated updates. If a conflict arises, human-verified information takes precedence over automated scans.
+The inventory is scanned daily by a GitHub Actions workflow that uses Claude with web search to find new incidents. Automated findings are submitted as **pull requests** for human review — they are never committed directly. Human contributions are merged alongside automated updates. If a conflict arises, human-verified information takes precedence over automated scans.
 
 ## Code of Conduct
 
