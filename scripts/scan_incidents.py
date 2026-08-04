@@ -8,6 +8,7 @@ Designed to run in GitHub Actions and produce a PR for human review.
 
 import os
 import sys
+import logging
 from pathlib import Path
 
 import anthropic
@@ -16,8 +17,8 @@ INVENTORY_PATH = Path(__file__).resolve().parent.parent / "incident_inventory.md
 
 SYSTEM_PROMPT = """\
 You are an AI incident researcher for the Open Machine Foundation. Your job is \
-to find new, credible incidents of AI agent misconduct and update the incident \
-inventory.
+ to find new, credible incidents of AI agent misconduct and update the incident \
+ inventory.
 
 Rules:
 - Use web search to find incidents reported since the last update date.
@@ -63,56 +64,96 @@ If no new credible incidents are found, respond with exactly: NO_NEW_INCIDENTS
 
 
 def main():
+    logging.basicConfig(level=logging.INFO)
+
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        print("Error: ANTHROPIC_API_KEY environment variable is not set.", file=sys.stderr)
+        logging.error("ANTHROPIC_API_KEY environment variable is not set.")
         sys.exit(1)
 
+    # Read the current inventory file
     inventory = INVENTORY_PATH.read_text(encoding="utf-8")
+
+    # Choose model via env var so CI/workflows can change it without editing code
+    MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-2")
+
+    logging.info("Using Anthropic model: %s", MODEL)
 
     client = anthropic.Anthropic(api_key=api_key)
 
-    print("Searching for new AI agent incidents...")
+    logging.info("Searching for new AI agent incidents...")
 
-    response = client.messages.create(
-        model="claude-sonnet-4-6-20250514",
-        max_tokens=16000,
-        system=SYSTEM_PROMPT,
-        tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 10}],
-        messages=[{"role": "user", "content": USER_PROMPT_TEMPLATE.format(inventory=inventory)}],
-    )
+    try:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=16000,
+            system=SYSTEM_PROMPT,
+            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 10}],
+            messages=[{"role": "user", "content": USER_PROMPT_TEMPLATE.format(inventory=inventory)}],
+        )
+    except Exception as e:
+        # Prefer catching the anthropic-specific NotFoundError when model is missing
+        try:
+            NotFound = getattr(anthropic, "NotFoundError", None)
+        except Exception:
+            NotFound = None
 
+        if NotFound is not None and isinstance(e, NotFound):
+            logging.error("Anthropic model '%s' was not found: %s", MODEL, e)
+            logging.error("Set the ANTHROPIC_MODEL environment variable in CI to a model you have access to (eg 'claude-2').")
+            sys.exit(2)
+
+        # Fallback: string-match common not-found messages
+        msg = str(e).lower()
+        if "not_found" in msg or ("model" in msg and "not found" in msg):
+            logging.error("Anthropic model '%s' was not found: %s", MODEL, e)
+            logging.error("Set the ANTHROPIC_MODEL environment variable in CI to a model you have access to (eg 'claude-2').")
+            sys.exit(2)
+
+        # Other errors => fail hard so CI surfaces the problem
+        logging.exception("Anthropic API request failed: %s", e)
+        sys.exit(1)
+
+    # The client returns an iterable of content blocks; join text blocks.
     result_text = ""
     for block in response.content:
-        if block.type == "text":
-            result_text += block.text
+        if getattr(block, "type", None) == "text":
+            result_text += getattr(block, "text", "")
 
     result_text = result_text.strip()
 
     if result_text == "NO_NEW_INCIDENTS" or not result_text:
-        print("No new incidents found.")
+        logging.info("No new incidents found.")
         sys.exit(0)
 
     # Update the inventory file
     INVENTORY_PATH.write_text(result_text + "\n", encoding="utf-8")
 
-    # Update the last-updated date
+    # Update the last-updated date if present; be defensive in case format changed
     from datetime import datetime, timezone
 
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    updated = INVENTORY_PATH.read_text(encoding="utf-8")
-    updated = updated.replace(
-        updated.split("**Last updated:** ")[1].split("\n")[0],
-        today,
-    )
-    INVENTORY_PATH.write_text(updated, encoding="utf-8")
+    try:
+        updated = INVENTORY_PATH.read_text(encoding="utf-8")
+        if "**Last updated:** " in updated:
+            old_date = updated.split("**Last updated:** ")[1].split("\n")[0]
+            updated = updated.replace(old_date, today, 1)
+            INVENTORY_PATH.write_text(updated, encoding="utf-8")
+        else:
+            logging.warning("Could not find '**Last updated:**' in inventory; skipping date update.")
+    except Exception:
+        logging.exception("Failed to update 'Last updated' date in inventory; continuing.")
 
-    print(f"Inventory updated with new incidents. Last updated set to {today}.")
+    logging.info("Inventory updated with new incidents. Last updated set to %s.", today)
+
     # Signal to the workflow that changes were made
     github_output = os.environ.get("GITHUB_OUTPUT")
     if github_output:
-        with open(github_output, "a") as f:
-            f.write("has_changes=true\n")
+        try:
+            with open(github_output, "a") as f:
+                f.write("has_changes=true\n")
+        except Exception:
+            logging.exception("Failed to write GITHUB_OUTPUT; CI may not detect changes.")
 
 
 if __name__ == "__main__":
