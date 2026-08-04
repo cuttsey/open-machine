@@ -82,8 +82,8 @@ def call_with_fallbacks(client, inventory_text):
     Returns the successful response object or raises the last non-NotFound exception.
     If none of the models exist, returns None.
     """
-    preferred = os.getenv("ANTHROPIC_MODEL", "claude-2")
-    fallback_list = [preferred, "claude-2", "claude-1"]
+    preferred = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-5")
+    fallback_list = [preferred, "claude-sonnet-4-5", "claude-opus-5"]
     # dedupe while preserving order
     seen = set()
     models = []
