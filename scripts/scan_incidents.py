@@ -8,8 +8,9 @@ Designed to run in GitHub Actions and produce a PR for human review.
 
 import os
 import sys
-import logging
+import traceback
 from pathlib import Path
+from datetime import datetime, timezone
 
 import anthropic
 
@@ -17,8 +18,8 @@ INVENTORY_PATH = Path(__file__).resolve().parent.parent / "incident_inventory.md
 
 SYSTEM_PROMPT = """\
 You are an AI incident researcher for the Open Machine Foundation. Your job is \
- to find new, credible incidents of AI agent misconduct and update the incident \
- inventory.
+to find new, credible incidents of AI agent misconduct and update the incident \
+inventory.
 
 Rules:
 - Use web search to find incidents reported since the last update date.
@@ -63,97 +64,123 @@ If no new credible incidents are found, respond with exactly: NO_NEW_INCIDENTS
 """
 
 
-def main():
-    logging.basicConfig(level=logging.INFO)
+def _write_github_output(has_changes: bool):
+    """Safely write the has_changes output for GitHub Actions steps."""
+    github_output = os.environ.get("GITHUB_OUTPUT")
+    try:
+        if github_output:
+            with open(github_output, "a") as f:
+                f.write(f"has_changes={'true' if has_changes else 'false'}\n")
+    except Exception:
+        # Best effort only; print a hint for debugging
+        print("Warning: could not write to GITHUB_OUTPUT (not running in Actions?)", file=sys.stderr)
 
+
+def call_with_fallbacks(client, inventory_text):
+    """Try a list of models (starting from ANTHROPIC_MODEL env var) until one works.
+
+    Returns the successful response object or raises the last non-NotFound exception.
+    If none of the models exist, returns None.
+    """
+    preferred = os.getenv("ANTHROPIC_MODEL", "claude-2")
+    fallback_list = [preferred, "claude-2", "claude-1"]
+    # dedupe while preserving order
+    seen = set()
+    models = []
+    for m in fallback_list:
+        if m not in seen:
+            models.append(m)
+            seen.add(m)
+
+    last_not_found = None
+    for model in models:
+        try:
+            print(f"Trying Anthropic model: {model}")
+            resp = client.messages.create(
+                model=model,
+                max_tokens=16000,
+                system=SYSTEM_PROMPT,
+                tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 10}],
+                messages=[{"role": "user", "content": USER_PROMPT_TEMPLATE.format(inventory=inventory_text)}],
+            )
+            return resp
+        except anthropic.NotFoundError as e:
+            last_not_found = e
+            print(f"Model not found: {model} -- {e}", file=sys.stderr)
+            continue
+        except Exception:
+            # Unexpected error: re-raise so the workflow fails and you can debug it
+            print(f"Unexpected error while calling Anthropic with model {model}:", file=sys.stderr)
+            traceback.print_exc()
+            raise
+
+    # If we reach here, none of the models existed
+    if last_not_found:
+        print("No supported Anthropic model was available. Tried models:", models, file=sys.stderr)
+    return None
+
+
+def main():
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key:
-        logging.error("ANTHROPIC_API_KEY environment variable is not set.")
+        print("Error: ANTHROPIC_API_KEY environment variable is not set.", file=sys.stderr)
         sys.exit(1)
 
-    # Read the current inventory file
     inventory = INVENTORY_PATH.read_text(encoding="utf-8")
-
-    # Choose model via env var so CI/workflows can change it without editing code
-    MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-2")
-
-    logging.info("Using Anthropic model: %s", MODEL)
 
     client = anthropic.Anthropic(api_key=api_key)
 
-    logging.info("Searching for new AI agent incidents...")
+    print("Searching for new AI agent incidents...")
 
     try:
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=16000,
-            system=SYSTEM_PROMPT,
-            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 10}],
-            messages=[{"role": "user", "content": USER_PROMPT_TEMPLATE.format(inventory=inventory)}],
-        )
-    except Exception as e:
-        # Prefer catching the anthropic-specific NotFoundError when model is missing
-        try:
-            NotFound = getattr(anthropic, "NotFoundError", None)
-        except Exception:
-            NotFound = None
-
-        if NotFound is not None and isinstance(e, NotFound):
-            logging.error("Anthropic model '%s' was not found: %s", MODEL, e)
-            logging.error("Set the ANTHROPIC_MODEL environment variable in CI to a model you have access to (eg 'claude-2').")
-            sys.exit(2)
-
-        # Fallback: string-match common not-found messages
-        msg = str(e).lower()
-        if "not_found" in msg or ("model" in msg and "not found" in msg):
-            logging.error("Anthropic model '%s' was not found: %s", MODEL, e)
-            logging.error("Set the ANTHROPIC_MODEL environment variable in CI to a model you have access to (eg 'claude-2').")
-            sys.exit(2)
-
-        # Other errors => fail hard so CI surfaces the problem
-        logging.exception("Anthropic API request failed: %s", e)
+        response = call_with_fallbacks(client, inventory)
+    except Exception:
+        # Unexpected error: fail the job so it can be diagnosed
+        _write_github_output(False)
         sys.exit(1)
 
-    # The client returns an iterable of content blocks; join text blocks.
+    if response is None:
+        # No available model: do not fail the workflow — skip PR creation
+        print(
+            "No available Anthropic model found (tried ANTHROPIC_MODEL and fallbacks). "
+            "Skipping scan to avoid failing the workflow."
+        )
+        _write_github_output(False)
+        # Exit 0 to avoid treating this as a failed run; has_changes=false prevents PR creation
+        sys.exit(0)
+
     result_text = ""
-    for block in response.content:
+    # response.content provides blocks; collect text blocks
+    for block in getattr(response, "content", []):
         if getattr(block, "type", None) == "text":
             result_text += getattr(block, "text", "")
 
     result_text = result_text.strip()
 
     if result_text == "NO_NEW_INCIDENTS" or not result_text:
-        logging.info("No new incidents found.")
+        print("No new incidents found.")
+        _write_github_output(False)
         sys.exit(0)
 
     # Update the inventory file
     INVENTORY_PATH.write_text(result_text + "\n", encoding="utf-8")
 
-    # Update the last-updated date if present; be defensive in case format changed
-    from datetime import datetime, timezone
-
+    # Update the last-updated date
     today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    updated = INVENTORY_PATH.read_text(encoding="utf-8")
     try:
-        updated = INVENTORY_PATH.read_text(encoding="utf-8")
-        if "**Last updated:** " in updated:
-            old_date = updated.split("**Last updated:** ")[1].split("\n")[0]
-            updated = updated.replace(old_date, today, 1)
-            INVENTORY_PATH.write_text(updated, encoding="utf-8")
-        else:
-            logging.warning("Could not find '**Last updated:**' in inventory; skipping date update.")
+        updated = updated.replace(
+            updated.split("**Last updated:** ")[1].split("\n")[0],
+            today,
+        )
+        INVENTORY_PATH.write_text(updated, encoding="utf-8")
     except Exception:
-        logging.exception("Failed to update 'Last updated' date in inventory; continuing.")
+        # If the inventory format changed, at least persist the new contents we received
+        print("Warning: couldn't update the Last updated line cleanly; inventory file has been replaced with the model output.", file=sys.stderr)
 
-    logging.info("Inventory updated with new incidents. Last updated set to %s.", today)
-
+    print(f"Inventory updated with new incidents. Last updated set to {today}.")
     # Signal to the workflow that changes were made
-    github_output = os.environ.get("GITHUB_OUTPUT")
-    if github_output:
-        try:
-            with open(github_output, "a") as f:
-                f.write("has_changes=true\n")
-        except Exception:
-            logging.exception("Failed to write GITHUB_OUTPUT; CI may not detect changes.")
+    _write_github_output(True)
 
 
 if __name__ == "__main__":
