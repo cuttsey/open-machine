@@ -13,13 +13,13 @@ The inventory is maintained automatically by a daily n8n workflow that uses Clau
 
 ## How It Works
 
-1. **Daily at 07:00 UTC**, an n8n scheduled workflow fires.
-2. The workflow fetches the current `incident_inventory.md` from this repository via the GitHub API.
-3. It calls Claude (Sonnet 4.5) with web search enabled, instructing it to find new incidents since the last update.
-4. If new incidents are found, the inventory is updated and committed back to this repository with a descriptive commit message.
+1. **Daily at 07:00 UTC**, a GitHub Actions workflow runs automatically (it can also be triggered manually).
+2. A Python script calls the Anthropic API (Claude with web search) to scan for new AI agent incidents since the last update.
+3. If new incidents are found, the workflow **creates a pull request** with the proposed changes for human review.
+4. A maintainer reviews the new entries — checking sources, tone, categories, and severity — then merges or requests changes.
 5. If no new incidents are found, the workflow logs the result and takes no action.
 
-All updates are attributed to the committer **AI Incident Tracker Bot** so they are clearly distinguishable from human edits.
+All automated updates go through pull requests so every change is human-reviewed before merging. The workflow requires an `ANTHROPIC_API_KEY` secret configured in the repository settings.
 
 ## Files
 
@@ -28,6 +28,9 @@ All updates are attributed to the committer **AI Incident Tracker Bot** so they 
 | `incident_inventory.md` | The living inventory of documented incidents |
 | `README.md` | This file |
 | `CONTRIBUTING.md` | Guidelines for human contributions |
+| `CLAUDE.md` | Guidance for AI assistants working in this repository |
+| `.github/workflows/incident-tracker.yml` | GitHub Actions workflow for daily incident scanning |
+| `scripts/scan_incidents.py` | Python script that calls Claude API with web search to find new incidents |
 | `LICENSE` | CC BY 4.0 — open for reuse with attribution |
 
 ## Incident Categories
