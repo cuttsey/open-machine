@@ -1,4 +1,4 @@
-# Incident Inventory: AI Agent Misconduct in the OpenClaw/Moltbook Ecosystem
+# Incident Inventory: AI Agent Misconduct in the wider Ecosystem
 
 **Last updated:** 2026-08-10
 
