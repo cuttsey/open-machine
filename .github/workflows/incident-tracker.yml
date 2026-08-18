@@ -3,7 +3,7 @@ name: Incident Tracker
 on:
   schedule:
     # Daily at 07:00 UTC
-    - cron: "0 7 * * *"
+    - cron: "0 7 * * 0,3"
   workflow_dispatch:
     # Allow manual triggers for testing
 
